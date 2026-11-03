@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ .Title }}</title>
+</head>
+<body>
+    {{ if .IsTermNode }}
+        {{ template "term" . }}
+    {{ else }}
+        {{ template "non-term" . }}
+    {{ end }}
+</body>
+</html>
