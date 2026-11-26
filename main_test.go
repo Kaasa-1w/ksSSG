@@ -20,6 +20,7 @@ func TestRunBuildsUsingProjectConfiguration(t *testing.T) {
 	writeFile(t, layoutDir, "base.html", `{{if .IsTermNode}}{{template "term" .}}{{else}}{{template "non-term" .}}{{end}}`)
 	writeFile(t, layoutDir, "term.html", `{{define "term"}}{{.Content}}{{end}}`)
 	writeFile(t, layoutDir, "non-term.html", `{{define "non-term"}}{{.Content}}{{end}}`)
+	writeFile(t, filepath.Join(root, "static"), "css/main.css", "body { color: blue; }\n")
 
 	if err := runAt([]string{"build"}, root); err != nil {
 		t.Fatalf("run() error = %v", err)
@@ -32,6 +33,7 @@ func TestRunBuildsUsingProjectConfiguration(t *testing.T) {
 	if got, want := string(output), "<h1>Home</h1>\n"; got != want {
 		t.Errorf("generated page = %q, want %q", got, want)
 	}
+	assertFileContains(t, filepath.Join(outputDir, "css", "main.css"), "body { color: blue; }\n")
 }
 
 func TestInitDoesNotOverwriteExistingConfiguration(t *testing.T) {
@@ -65,7 +67,7 @@ func TestInitCreatesConfigurationWithDefaultDirectories(t *testing.T) {
 	if err := json.Unmarshal(contents, &config); err != nil {
 		t.Fatalf("parse generated configuration: %v", err)
 	}
-	if config != (projectConfig{SourceDir: "content", OutputDir: "public", LayoutDir: "layout"}) {
+	if config != (projectConfig{SourceDir: "content", OutputDir: "public", LayoutDir: "layout", StaticDir: "static"}) {
 		t.Errorf("generated configuration = %+v", config)
 	}
 }
@@ -101,6 +103,7 @@ func TestLoadProjectConfigResolvesRelativeAndAbsoluteDirectories(t *testing.T) {
 		SourceDir: absoluteSourceDir,
 		OutputDir: "public",
 		LayoutDir: "layout",
+		StaticDir: "assets",
 	})
 	if err != nil {
 		t.Fatalf("marshal project configuration: %v", err)
@@ -120,6 +123,9 @@ func TestLoadProjectConfigResolvesRelativeAndAbsoluteDirectories(t *testing.T) {
 	if config.LayoutDir != filepath.Join(root, "layout") {
 		t.Errorf("layout directory = %q, want %q", config.LayoutDir, filepath.Join(root, "layout"))
 	}
+	if config.StaticDir != filepath.Join(root, "assets") {
+		t.Errorf("static directory = %q, want %q", config.StaticDir, filepath.Join(root, "assets"))
+	}
 }
 
 func TestRunRejectsUnknownCommand(t *testing.T) {
@@ -136,5 +142,16 @@ func writeFile(t *testing.T, root, relativePath, contents string) {
 	}
 	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func assertFileContains(t *testing.T, path, expected string) {
+	t.Helper()
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file %q: %v", path, err)
+	}
+	if string(contents) != expected {
+		t.Errorf("file %q = %q, want %q", path, contents, expected)
 	}
 }

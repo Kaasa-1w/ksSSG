@@ -15,6 +15,7 @@ type projectConfig struct {
 	SourceDir string `json:"source_dir"`
 	OutputDir string `json:"output_dir"`
 	LayoutDir string `json:"layout_dir"`
+	StaticDir string `json:"static_dir"`
 }
 
 func initializeProject(directory string) error {
@@ -23,6 +24,7 @@ func initializeProject(directory string) error {
 		SourceDir: "content",
 		OutputDir: "public",
 		LayoutDir: "layout",
+		StaticDir: "static",
 	}
 	contents, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -95,10 +97,15 @@ func (config projectConfig) validate() error {
 }
 
 func (config projectConfig) toSiteConfig(baseDir string) site.Config {
+	staticDir := config.StaticDir
+	if staticDir == "" {
+		staticDir = "static"
+	}
 	return site.Config{
 		SourceDir: resolveConfigPath(baseDir, config.SourceDir),
 		OutputDir: resolveConfigPath(baseDir, config.OutputDir),
 		LayoutDir: resolveConfigPath(baseDir, config.LayoutDir),
+		StaticDir: resolveConfigPath(baseDir, staticDir),
 	}
 }
 

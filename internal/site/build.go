@@ -2,6 +2,7 @@ package site
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ type Config struct {
 	SourceDir string
 	OutputDir string
 	LayoutDir string
+	StaticDir string
 }
 
 // DefaultConfig returns the repository's default source, output, and layout directories.
@@ -24,10 +26,11 @@ func DefaultConfig() Config {
 		SourceDir: "test/content",
 		OutputDir: "test/public",
 		LayoutDir: "test/layout",
+		StaticDir: "test/static",
 	}
 }
 
-// Build reads the site's pages, creates their hierarchy, and renders published content.
+// Build reads the site's pages, copies static assets, and renders published content.
 func Build(config Config) error {
 	if err := config.validate(); err != nil {
 		return err
@@ -40,6 +43,9 @@ func Build(config Config) error {
 
 	pages, err := loadPages(config.SourceDir)
 	if err != nil {
+		return err
+	}
+	if err := copyStaticFiles(config.StaticDir, config.OutputDir); err != nil {
 		return err
 	}
 
@@ -76,6 +82,79 @@ func Build(config Config) error {
 		if closeErr != nil {
 			return fmt.Errorf("failed to close output file %q: %w", outputPath, closeErr)
 		}
+	}
+	return nil
+}
+
+// copyStaticFiles copies regular files from the static directory into the output directory.
+func copyStaticFiles(staticDir, outputDir string) error {
+	if staticDir == "" {
+		return nil
+	}
+	info, err := os.Stat(staticDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect static directory %q: %w", staticDir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("static path %q is not a directory", staticDir)
+	}
+
+	err = filepath.WalkDir(staticDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("failed to walk static directory at %q: %w", path, walkErr)
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		fileInfo, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("failed to inspect static file %q: %w", path, err)
+		}
+		if !fileInfo.Mode().IsRegular() {
+			return nil
+		}
+
+		relativePath, err := filepath.Rel(staticDir, path)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path for static file %q: %w", path, err)
+		}
+		outputPath := filepath.Join(outputDir, relativePath)
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
+			return fmt.Errorf("failed to create output directory for static file %q: %w", outputPath, err)
+		}
+		if err := copyFile(path, outputPath, fileInfo.Mode().Perm()); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to copy static files from %q: %w", staticDir, err)
+	}
+	return nil
+}
+
+func copyFile(sourcePath, outputPath string, mode os.FileMode) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to open static file %q: %w", sourcePath, err)
+	}
+	defer source.Close()
+
+	output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return fmt.Errorf("failed to create output file for static asset %q: %w", outputPath, err)
+	}
+	_, copyErr := io.Copy(output, source)
+	closeErr := output.Close()
+	if copyErr != nil {
+		return fmt.Errorf("failed to copy static file %q: %w", sourcePath, copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to close output file for static asset %q: %w", outputPath, closeErr)
 	}
 	return nil
 }

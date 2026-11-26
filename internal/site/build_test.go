@@ -13,6 +13,8 @@ import (
 func TestBuildRendersPublishedPagesAndSkipsDrafts(t *testing.T) {
 	root := t.TempDir()
 	config := writeSiteFixture(t, root)
+	writeFile(t, config.StaticDir, "css/site.css", "body { color: red; }\n")
+	writeFile(t, config.StaticDir, "images/logo.svg", "<svg></svg>\n")
 	writeFile(t, config.SourceDir, "index.md", page("Home", false, "# Home"))
 	writeFile(t, config.SourceDir, "about.md", page("About", true, "# About"))
 	writeFile(t, config.SourceDir, "articles/index.md", page("Articles", false, "# Articles"))
@@ -28,6 +30,8 @@ func TestBuildRendersPublishedPagesAndSkipsDrafts(t *testing.T) {
 	assertOutputContains(t, filepath.Join(config.OutputDir, "articles", "index.html"), `class="non-term"`)
 	assertOutputContains(t, filepath.Join(config.OutputDir, "articles", "first.html"), `class="term"`)
 	assertOutputContains(t, filepath.Join(config.OutputDir, "articles", "reference", "syntax.html"), `<h1>Syntax</h1>`)
+	assertOutputContains(t, filepath.Join(config.OutputDir, "css", "site.css"), "body { color: red; }")
+	assertOutputContains(t, filepath.Join(config.OutputDir, "images", "logo.svg"), "<svg></svg>")
 	if _, err := os.Stat(filepath.Join(config.OutputDir, "about.html")); !os.IsNotExist(err) {
 		t.Fatalf("draft output should not exist, stat error = %v", err)
 	}
@@ -91,6 +95,7 @@ func writeSiteFixture(t *testing.T, root string) Config {
 		SourceDir: filepath.Join(root, "content"),
 		OutputDir: filepath.Join(root, "public"),
 		LayoutDir: filepath.Join(root, "layout"),
+		StaticDir: filepath.Join(root, "static"),
 	}
 	writeFile(t, config.LayoutDir, "base.html", `{{if .IsTermNode}}{{template "term" .}}{{else}}{{template "non-term" .}}{{end}}`)
 	writeFile(t, config.LayoutDir, "term.html", `{{define "term"}}<main class="term">{{.Content}}</main>{{end}}`)

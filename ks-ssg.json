@@ -1,5 +1,6 @@
 {
   "source_dir": "test/content",
   "output_dir": "test/public",
-  "layout_dir": "test/layout"
+  "layout_dir": "test/layout",
+  "static_dir": "test/static"
 }
