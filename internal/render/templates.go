@@ -1,6 +1,7 @@
 package render
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"io"
@@ -54,4 +55,27 @@ func NewRenderer(layoutDir string) (*Renderer, error) {
 // Render executes the shared page template and its node-specific content template.
 func (r *Renderer) Render(writer io.Writer, node *content.Node) error {
 	return r.templates.ExecuteTemplate(writer, "base.html", node)
+}
+
+// RenderMarkdown converts Markdown and executes user-defined shortcode templates.
+func (r *Renderer) RenderMarkdown(source []byte, page *content.Node) (template.HTML, error) {
+	return markdownToHTML(source, func(name string, args map[string]string) (template.HTML, error) {
+		templateName := "shortcode:" + name
+		if r.templates.Lookup(templateName) == nil {
+			return "", fmt.Errorf("template %q is not defined", templateName)
+		}
+
+		var output bytes.Buffer
+		data := struct {
+			Page *content.Node
+			Args map[string]string
+		}{
+			Page: page,
+			Args: args,
+		}
+		if err := r.templates.ExecuteTemplate(&output, templateName, data); err != nil {
+			return "", fmt.Errorf("execute template %q: %w", templateName, err)
+		}
+		return template.HTML(output.String()), nil
+	})
 }

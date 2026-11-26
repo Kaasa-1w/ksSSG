@@ -73,6 +73,64 @@ func TestNewRendererLoadsAddedTemplatesAndCrossFileDefinitions(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownExecutesShortcodeTemplatesWithPageAndArguments(t *testing.T) {
+	layoutDir := t.TempDir()
+	writeTemplateFile(t, layoutDir, "base.html", `{{.Content}}`)
+	writeTemplateFile(t, layoutDir, "shortcodes/link.html", `{{define "shortcode:link"}}{{if eq .Args.route "about"}}<a href="/about.html">{{else}}<a href="{{.Args.url}}">{{end}}{{if .Args.label}}{{.Args.label}}{{else}}{{.Page.Title}}{{end}}</a>{{end}}`)
+	writeTemplateFile(t, layoutDir, "shortcodes/wrapper.html", `{{define "shortcode:wrapper"}}<section>{{template "shortcode:link" .}}</section>{{end}}`)
+
+	renderer, err := NewRenderer(layoutDir)
+	if err != nil {
+		t.Fatalf("NewRenderer() error = %v", err)
+	}
+
+	got, err := renderer.RenderMarkdown(
+		[]byte(`See {{< wrapper url="/about?x=a&y=b" label="About & info" >}}.`),
+		&content.Node{Title: "Fallback"},
+	)
+	if err != nil {
+		t.Fatalf("RenderMarkdown() error = %v", err)
+	}
+	if want := `<p>See <section><a href="/about?x=a&amp;y=b">About &amp; info</a></section>.</p>` + "\n"; string(got) != want {
+		t.Errorf("RenderMarkdown() = %q, want %q", got, want)
+	}
+
+	got, err = renderer.RenderMarkdown([]byte(`{{< link route="about" >}}`), &content.Node{Title: "Fallback"})
+	if err != nil {
+		t.Fatalf("RenderMarkdown() without label error = %v", err)
+	}
+	if want := `<a href="/about.html">Fallback</a>` + "\n"; string(got) != want {
+		t.Errorf("RenderMarkdown() without label = %q, want %q", got, want)
+	}
+}
+
+func TestRenderMarkdownReportsUnknownAndFailingShortcodes(t *testing.T) {
+	layoutDir := t.TempDir()
+	writeTemplateFile(t, layoutDir, "base.html", `{{.Content}}`)
+	writeTemplateFile(t, layoutDir, "shortcodes/failure.html", `{{define "shortcode:failure"}}{{.Page.Missing}}{{end}}`)
+
+	renderer, err := NewRenderer(layoutDir)
+	if err != nil {
+		t.Fatalf("NewRenderer() error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		markdown string
+		want     string
+	}{
+		{name: "unknown", markdown: `{{< missing >}}`, want: `template "shortcode:missing" is not defined`},
+		{name: "execution failure", markdown: `{{< failure >}}`, want: `shortcode "failure"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := renderer.RenderMarkdown([]byte(test.markdown), &content.Node{})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("RenderMarkdown() error = %v, want error containing %q", err, test.want)
+			}
+		})
+	}
+}
+
 func writeTemplateFile(t *testing.T, root, relativePath, contents string) {
 	t.Helper()
 	path := filepath.Join(root, relativePath)

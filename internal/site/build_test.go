@@ -88,6 +88,17 @@ func TestBuildReturnsContextForInvalidFrontMatter(t *testing.T) {
 	}
 }
 
+func TestBuildReturnsContextForUnknownShortcode(t *testing.T) {
+	root := t.TempDir()
+	config := writeSiteFixture(t, root)
+	writeFile(t, config.SourceDir, "broken.md", page("Broken", false, `{{< missing >}}`))
+
+	err := Build(config)
+	if err == nil || !strings.Contains(err.Error(), "broken.md") || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("Build() error = %v, want shortcode and source filename context", err)
+	}
+}
+
 // writeSiteFixture creates isolated source, output, and layout directories for a test.
 func writeSiteFixture(t *testing.T, root string) Config {
 	t.Helper()

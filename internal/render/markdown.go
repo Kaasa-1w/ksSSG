@@ -6,12 +6,27 @@ import (
 	"unicode/utf8"
 )
 
+type shortcodeExecutor func(string, map[string]string) (template.HTML, error)
+
+type markdownRenderState struct {
+	executeShortcode shortcodeExecutor
+	err              error
+}
+
 // MarkdownToHTML converts Markdown source into trusted HTML.
 func MarkdownToHTML(source []byte) (template.HTML, error) {
+	return markdownToHTML(source, nil)
+}
+
+func markdownToHTML(source []byte, executeShortcode shortcodeExecutor) (template.HTML, error) {
 	text := normalizeNewlines(string(source))
 
 	var out strings.Builder
-	renderBlocks(strings.Split(text, "\n"), &out)
+	state := &markdownRenderState{executeShortcode: executeShortcode}
+	renderBlocks(strings.Split(text, "\n"), &out, state)
+	if state.err != nil {
+		return "", state.err
+	}
 	return template.HTML(out.String()), nil
 }
 
@@ -21,8 +36,11 @@ func normalizeNewlines(source string) string {
 }
 
 // renderBlocks parses and writes block-level Markdown elements.
-func renderBlocks(lines []string, out *strings.Builder) {
+func renderBlocks(lines []string, out *strings.Builder, state *markdownRenderState) {
 	for i := 0; i < len(lines); {
+		if state.err != nil {
+			return
+		}
 		line := lines[i]
 		if strings.TrimSpace(line) == "" {
 			i++
@@ -43,27 +61,27 @@ func renderBlocks(lines []string, out *strings.Builder) {
 		}
 
 		if heading, ok := parseATXHeading(line); ok {
-			writeHeading(out, heading.level, heading.text)
+			writeHeading(out, heading.level, heading.text, state)
 			i++
 			continue
 		}
 
 		if level, ok := parseSetextHeading(lines, i); ok {
-			writeHeading(out, level, strings.TrimSpace(line))
+			writeHeading(out, level, strings.TrimSpace(line), state)
 			i += 2
 			continue
 		}
 
 		if strings.HasPrefix(line, ">") || strings.HasPrefix(line, " >") {
-			i = renderBlockquote(lines, i, out)
+			i = renderBlockquote(lines, i, out, state)
 			continue
 		}
 		if _, ok := unorderedMarker(line); ok {
-			i = renderUnorderedList(lines, i, out)
+			i = renderUnorderedList(lines, i, out, state)
 			continue
 		}
 		if _, ok := orderedMarker(line); ok {
-			i = renderOrderedList(lines, i, out)
+			i = renderOrderedList(lines, i, out, state)
 			continue
 		}
 		if strings.HasPrefix(line, "    ") || strings.HasPrefix(line, "\t") {
@@ -71,7 +89,25 @@ func renderBlocks(lines []string, out *strings.Builder) {
 			continue
 		}
 
-		i = renderParagraph(lines, i, out)
+		call, isShortcodeBlock, err := parseStandaloneShortcode(line)
+		if err != nil {
+			state.err = err
+			return
+		}
+		if isShortcodeBlock {
+			output := state.renderShortcode(call)
+			out.WriteString(output)
+			if state.err != nil {
+				return
+			}
+			if !strings.HasSuffix(output, "\n") {
+				out.WriteByte('\n')
+			}
+			i++
+			continue
+		}
+
+		i = renderParagraph(lines, i, out, state)
 	}
 }
 
@@ -81,11 +117,11 @@ type heading struct {
 }
 
 // writeHeading writes a heading and renders inline Markdown in its text.
-func writeHeading(out *strings.Builder, level int, text string) {
+func writeHeading(out *strings.Builder, level int, text string, state *markdownRenderState) {
 	out.WriteString("<h")
 	out.WriteByte('0' + byte(level))
 	out.WriteByte('>')
-	out.WriteString(renderInline(text))
+	out.WriteString(renderInline(text, state))
 	out.WriteString("</h")
 	out.WriteByte('0' + byte(level))
 	out.WriteString(">\n")
@@ -230,7 +266,7 @@ func renderIndentedCode(lines []string, start int, out *strings.Builder) int {
 }
 
 // renderBlockquote collects quoted lines and renders them as nested blocks.
-func renderBlockquote(lines []string, start int, out *strings.Builder) int {
+func renderBlockquote(lines []string, start int, out *strings.Builder, state *markdownRenderState) int {
 	var quoted []string
 	i := start
 	for i < len(lines) {
@@ -245,7 +281,7 @@ func renderBlockquote(lines []string, start int, out *strings.Builder) int {
 		i++
 	}
 	out.WriteString("<blockquote>\n")
-	renderBlocks(quoted, out)
+	renderBlocks(quoted, out, state)
 	out.WriteString("</blockquote>\n")
 	return i
 }
@@ -275,7 +311,7 @@ func orderedMarker(line string) (string, bool) {
 }
 
 // renderUnorderedList renders consecutive unordered-list items.
-func renderUnorderedList(lines []string, start int, out *strings.Builder) int {
+func renderUnorderedList(lines []string, start int, out *strings.Builder, state *markdownRenderState) int {
 	out.WriteString("<ul>\n")
 	i := start
 	for i < len(lines) {
@@ -285,7 +321,7 @@ func renderUnorderedList(lines []string, start int, out *strings.Builder) int {
 		trimmed := strings.TrimLeft(lines[i], " ")
 		text := strings.TrimLeft(trimmed[1:], " \t")
 		out.WriteString("<li>")
-		out.WriteString(renderInline(text))
+		out.WriteString(renderInline(text, state))
 		out.WriteString("</li>\n")
 		i++
 	}
@@ -294,7 +330,7 @@ func renderUnorderedList(lines []string, start int, out *strings.Builder) int {
 }
 
 // renderOrderedList renders consecutive ordered-list items.
-func renderOrderedList(lines []string, start int, out *strings.Builder) int {
+func renderOrderedList(lines []string, start int, out *strings.Builder, state *markdownRenderState) int {
 	out.WriteString("<ol>\n")
 	i := start
 	for i < len(lines) {
@@ -306,7 +342,7 @@ func renderOrderedList(lines []string, start int, out *strings.Builder) int {
 		text := strings.TrimSpace(trimmed[len(marker):])
 		text = strings.TrimLeft(text, ". ")
 		out.WriteString("<li>")
-		out.WriteString(renderInline(text))
+		out.WriteString(renderInline(text, state))
 		out.WriteString("</li>\n")
 		i++
 	}
@@ -315,7 +351,7 @@ func renderOrderedList(lines []string, start int, out *strings.Builder) int {
 }
 
 // renderParagraph collects paragraph lines and renders inline content with hard breaks.
-func renderParagraph(lines []string, start int, out *strings.Builder) int {
+func renderParagraph(lines []string, start int, out *strings.Builder, state *markdownRenderState) int {
 	var paragraph []string
 	i := start
 	for i < len(lines) {
@@ -337,10 +373,10 @@ func renderParagraph(lines []string, start int, out *strings.Builder) int {
 		hardBreak := strings.HasSuffix(line, "  ")
 		if hardBreak {
 			line = strings.TrimSuffix(line, "  ")
-			out.WriteString(renderInline(line))
+			out.WriteString(renderInline(line, state))
 			out.WriteString("<br>")
 		} else {
-			out.WriteString(renderInline(line))
+			out.WriteString(renderInline(line, state))
 		}
 	}
 	out.WriteString("</p>\n")
@@ -352,6 +388,12 @@ func beginsBlock(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || isThematicBreak(trimmed) {
 		return true
+	}
+	if strings.HasPrefix(trimmed, "{{<") {
+		_, isShortcodeBlock, err := parseStandaloneShortcode(line)
+		if isShortcodeBlock || err != nil {
+			return true
+		}
 	}
 	if _, ok := parseATXHeading(line); ok {
 		return true
@@ -371,9 +413,12 @@ func beginsBlock(line string) bool {
 }
 
 // renderInline parses emphasis, links, code, escapes, and raw HTML within text.
-func renderInline(source string) string {
+func renderInline(source string, state *markdownRenderState) string {
 	var out strings.Builder
 	for i := 0; i < len(source); {
+		if state.err != nil {
+			return out.String()
+		}
 		if source[i] == '\\' && i+1 < len(source) && isEscapable(source[i+1]) {
 			out.WriteRune(rune(source[i+1]))
 			i += 2
@@ -393,6 +438,20 @@ func renderInline(source string) string {
 			}
 		}
 
+		if strings.HasPrefix(source[i:], "{{<") {
+			call, end, err := parseShortcodeAt(source, i)
+			if err != nil {
+				state.err = err
+				return out.String()
+			}
+			out.WriteString(state.renderShortcode(call))
+			if state.err != nil {
+				return out.String()
+			}
+			i = end
+			continue
+		}
+
 		if source[i] == '!' && i+1 < len(source) && source[i+1] == '[' {
 			if alt, destination, end, ok := parseLink(source, i+1); ok {
 				out.WriteString(`<img src="`)
@@ -410,7 +469,7 @@ func renderInline(source string) string {
 				out.WriteString(`<a href="`)
 				out.WriteString(escapeHTMLAttribute(destination))
 				out.WriteString(`">`)
-				out.WriteString(renderInline(text))
+				out.WriteString(renderInline(text, state))
 				out.WriteString("</a>")
 				i = end
 				continue
@@ -422,7 +481,7 @@ func renderInline(source string) string {
 			if end := strings.Index(source[i+2:], marker); end >= 0 {
 				end += i + 2
 				out.WriteString("<strong>")
-				out.WriteString(renderInline(source[i+2 : end]))
+				out.WriteString(renderInline(source[i+2:end], state))
 				out.WriteString("</strong>")
 				i = end + 2
 				continue
@@ -434,7 +493,7 @@ func renderInline(source string) string {
 			if end := strings.IndexByte(source[i+1:], marker); end >= 0 {
 				end += i + 1
 				out.WriteString("<em>")
-				out.WriteString(renderInline(source[i+1 : end]))
+				out.WriteString(renderInline(source[i+1:end], state))
 				out.WriteString("</em>")
 				i = end + 1
 				continue

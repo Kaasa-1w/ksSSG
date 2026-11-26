@@ -59,7 +59,7 @@ func Build(config Config) error {
 			continue
 		}
 
-		page.Content, err = render.MarkdownToHTML(page.Body)
+		page.Content, err = renderer.RenderMarkdown(page.Body, page)
 		if err != nil {
 			return fmt.Errorf("failed to convert Markdown for %q: %w", page.SourcePath, err)
 		}
