@@ -3,6 +3,8 @@ package render
 import (
 	"bytes"
 	"html/template"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,5 +50,36 @@ func TestRenderSelectsTemplateByTermStatus(t *testing.T) {
 				t.Fatalf("output does not contain rendered content:\n%s", output.String())
 			}
 		})
+	}
+}
+
+func TestNewRendererLoadsAddedTemplatesAndCrossFileDefinitions(t *testing.T) {
+	layoutDir := t.TempDir()
+	writeTemplateFile(t, layoutDir, "base.html", `{{template "card" .}}`)
+	writeTemplateFile(t, layoutDir, "components/card.html", `{{define "card"}}Card: {{template "sample" .}}{{end}}`)
+	writeTemplateFile(t, layoutDir, "components/sample.html", `{{define "sample"}}{{.Title}}{{end}}`)
+
+	renderer, err := NewRenderer(layoutDir)
+	if err != nil {
+		t.Fatalf("NewRenderer() error = %v", err)
+	}
+
+	var output bytes.Buffer
+	if err := renderer.Render(&output, &content.Node{Title: "Example"}); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if got, want := output.String(), "Card: Example"; got != want {
+		t.Errorf("rendered output = %q, want %q", got, want)
+	}
+}
+
+func writeTemplateFile(t *testing.T, root, relativePath, contents string) {
+	t.Helper()
+	path := filepath.Join(root, relativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
