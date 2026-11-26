@@ -70,6 +70,58 @@ func TestInitCreatesConfigurationWithDefaultDirectories(t *testing.T) {
 	}
 }
 
+func TestLoadProjectConfigRejectsEmptyDirectories(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+		field  string
+	}{
+		{name: "source", config: `{"source_dir":"","output_dir":"public","layout_dir":"layout"}`, field: "source_dir"},
+		{name: "output", config: `{"source_dir":"content","output_dir":"","layout_dir":"layout"}`, field: "output_dir"},
+		{name: "layout", config: `{"source_dir":"content","output_dir":"public","layout_dir":""}`, field: "layout_dir"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFile(t, root, configFileName, test.config)
+
+			_, err := loadProjectConfig(root)
+			if err == nil || err.Error() != `configuration field "`+test.field+`" must not be empty` {
+				t.Fatalf("loadProjectConfig() error = %v, want empty %s error", err, test.field)
+			}
+		})
+	}
+}
+
+func TestLoadProjectConfigResolvesRelativeAndAbsoluteDirectories(t *testing.T) {
+	root := t.TempDir()
+	absoluteSourceDir := filepath.Join(root, "external-content")
+	contents, err := json.Marshal(projectConfig{
+		SourceDir: absoluteSourceDir,
+		OutputDir: "public",
+		LayoutDir: "layout",
+	})
+	if err != nil {
+		t.Fatalf("marshal project configuration: %v", err)
+	}
+	writeFile(t, root, configFileName, string(contents))
+
+	config, err := loadProjectConfig(root)
+	if err != nil {
+		t.Fatalf("loadProjectConfig() error = %v", err)
+	}
+	if config.SourceDir != absoluteSourceDir {
+		t.Errorf("source directory = %q, want absolute path %q", config.SourceDir, absoluteSourceDir)
+	}
+	if config.OutputDir != filepath.Join(root, "public") {
+		t.Errorf("output directory = %q, want %q", config.OutputDir, filepath.Join(root, "public"))
+	}
+	if config.LayoutDir != filepath.Join(root, "layout") {
+		t.Errorf("layout directory = %q, want %q", config.LayoutDir, filepath.Join(root, "layout"))
+	}
+}
+
 func TestRunRejectsUnknownCommand(t *testing.T) {
 	if err := runAt([]string{"publish"}, t.TempDir()); err == nil {
 		t.Fatal("run() error = nil, want unknown command error")

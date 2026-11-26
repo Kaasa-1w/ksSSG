@@ -48,36 +48,58 @@ func initializeProject(directory string) error {
 }
 
 func buildProject(directory string) error {
+	config, err := loadProjectConfig(directory)
+	if err != nil {
+		return err
+	}
+	return site.Build(config)
+}
+
+func loadProjectConfig(directory string) (site.Config, error) {
 	configPath := filepath.Join(directory, configFileName)
 	contents, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("read configuration file %q: %w", configPath, err)
+		return site.Config{}, fmt.Errorf("read configuration file %q: %w", configPath, err)
 	}
 
 	var project projectConfig
 	if err := json.Unmarshal(contents, &project); err != nil {
-		return fmt.Errorf("parse configuration file %q: %w", configPath, err)
+		return site.Config{}, fmt.Errorf("parse configuration file %q: %w", configPath, err)
 	}
-	if project.SourceDir == "" {
-		return fmt.Errorf("configuration field %q must not be empty", "source_dir")
-	}
-	if project.OutputDir == "" {
-		return fmt.Errorf("configuration field %q must not be empty", "output_dir")
-	}
-	if project.LayoutDir == "" {
-		return fmt.Errorf("configuration field %q must not be empty", "layout_dir")
+	if err := project.validate(); err != nil {
+		return site.Config{}, err
 	}
 
 	baseDir, err := filepath.Abs(directory)
 	if err != nil {
-		return fmt.Errorf("resolve configuration directory %q: %w", directory, err)
+		return site.Config{}, fmt.Errorf("resolve configuration directory %q: %w", directory, err)
 	}
-	config := site.Config{
-		SourceDir: resolveConfigPath(baseDir, project.SourceDir),
-		OutputDir: resolveConfigPath(baseDir, project.OutputDir),
-		LayoutDir: resolveConfigPath(baseDir, project.LayoutDir),
+	return project.toSiteConfig(baseDir), nil
+}
+
+func (config projectConfig) validate() error {
+	fields := []struct {
+		name  string
+		value string
+	}{
+		{name: "source_dir", value: config.SourceDir},
+		{name: "output_dir", value: config.OutputDir},
+		{name: "layout_dir", value: config.LayoutDir},
 	}
-	return site.Build(config)
+	for _, field := range fields {
+		if field.value == "" {
+			return fmt.Errorf("configuration field %q must not be empty", field.name)
+		}
+	}
+	return nil
+}
+
+func (config projectConfig) toSiteConfig(baseDir string) site.Config {
+	return site.Config{
+		SourceDir: resolveConfigPath(baseDir, config.SourceDir),
+		OutputDir: resolveConfigPath(baseDir, config.OutputDir),
+		LayoutDir: resolveConfigPath(baseDir, config.LayoutDir),
+	}
 }
 
 func resolveConfigPath(baseDir, path string) string {
