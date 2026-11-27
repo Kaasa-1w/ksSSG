@@ -107,8 +107,9 @@ func writeSiteFixture(t *testing.T, root string) Config {
 		OutputDir: filepath.Join(root, "public"),
 		LayoutDir: filepath.Join(root, "layout"),
 		StaticDir: filepath.Join(root, "static"),
+		BaseURL:   "https://example.test/",
 	}
-	writeFile(t, config.LayoutDir, "base.html", `{{.Content}}`)
+	writeFile(t, config.LayoutDir, "base.html", `{{.BaseURL}}|{{.Content}}`)
 	writeFile(t, config.LayoutDir, "term.html", `{{define "term"}}<main class="term">{{.Content}}</main>{{end}}`)
 	writeFile(t, config.LayoutDir, "non-term.html", `{{define "non-term"}}<main class="non-term">{{.Content}}</main>{{end}}`)
 	return config

@@ -59,7 +59,7 @@ func TestRenderSelectsTemplateByTermStatus(t *testing.T) {
 
 func TestNewRendererLoadsAddedTemplatesAndCrossFileDefinitions(t *testing.T) {
 	layoutDir := t.TempDir()
-	writeTemplateFile(t, layoutDir, "base.html", `{{.Content}}`)
+	writeTemplateFile(t, layoutDir, "base.html", `{{.BaseURL}}|{{.Content}}`)
 	writeTemplateFile(t, layoutDir, "term.html", `{{define "term"}}{{template "card" .}}{{end}}`)
 	writeTemplateFile(t, layoutDir, "non-term.html", `{{define "non-term"}}{{template "card" .}}{{end}}`)
 	writeTemplateFile(t, layoutDir, "components/card.html", `{{define "card"}}Card: {{template "sample" .}}{{end}}`)
@@ -71,10 +71,10 @@ func TestNewRendererLoadsAddedTemplatesAndCrossFileDefinitions(t *testing.T) {
 	}
 
 	var output bytes.Buffer
-	if err := renderer.Render(&output, &content.Node{Title: "Example"}); err != nil {
+	if err := renderer.Render(&output, &content.Node{Title: "Example", BaseURL: "https://mysite.example/"}); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	if got, want := output.String(), "Card: Example"; got != want {
+	if got, want := output.String(), "https://mysite.example/|Card: Example"; got != want {
 		t.Errorf("rendered output = %q, want %q", got, want)
 	}
 }
@@ -82,7 +82,7 @@ func TestNewRendererLoadsAddedTemplatesAndCrossFileDefinitions(t *testing.T) {
 func TestRenderMarkdownExecutesShortcodeTemplatesWithPageAndArguments(t *testing.T) {
 	layoutDir := t.TempDir()
 	writeTemplateFile(t, layoutDir, "base.html", `{{.Content}}`)
-	writeTemplateFile(t, layoutDir, "shortcodes/link.html", `{{define "shortcode:link"}}{{if eq .Args.route "about"}}<a href="/about.html">{{else}}<a href="{{.Args.url}}">{{end}}{{if .Args.label}}{{.Args.label}}{{else}}{{.Page.Title}}{{end}}</a>{{end}}`)
+	writeTemplateFile(t, layoutDir, "shortcodes/link.html", `{{define "shortcode:link"}}{{if eq .Args.route "about"}}<a href="/about.html" data-base="{{.Page.BaseURL}}">{{else}}<a href="{{.Args.url}}" data-base="{{.Page.BaseURL}}">{{end}}{{if .Args.label}}{{.Args.label}}{{else}}{{.Page.Title}}{{end}}</a>{{end}}`)
 	writeTemplateFile(t, layoutDir, "shortcodes/wrapper.html", `{{define "shortcode:wrapper"}}<section>{{template "shortcode:link" .}}</section>{{end}}`)
 
 	renderer, err := NewRenderer(layoutDir)
@@ -92,20 +92,20 @@ func TestRenderMarkdownExecutesShortcodeTemplatesWithPageAndArguments(t *testing
 
 	got, err := renderer.RenderMarkdown(
 		[]byte(`See {{< wrapper url="/about?x=a&y=b" label="About & info" >}}.`),
-		&content.Node{Title: "Fallback"},
+		&content.Node{Title: "Fallback", BaseURL: "https://mysite.example/"},
 	)
 	if err != nil {
 		t.Fatalf("RenderMarkdown() error = %v", err)
 	}
-	if want := `<p>See <section><a href="/about?x=a&amp;y=b">About &amp; info</a></section>.</p>` + "\n"; string(got) != want {
+	if want := `<p>See <section><a href="/about?x=a&amp;y=b" data-base="https://mysite.example/">About &amp; info</a></section>.</p>` + "\n"; string(got) != want {
 		t.Errorf("RenderMarkdown() = %q, want %q", got, want)
 	}
 
-	got, err = renderer.RenderMarkdown([]byte(`{{< link route="about" >}}`), &content.Node{Title: "Fallback"})
+	got, err = renderer.RenderMarkdown([]byte(`{{< link route="about" >}}`), &content.Node{Title: "Fallback", BaseURL: "https://mysite.example/"})
 	if err != nil {
 		t.Fatalf("RenderMarkdown() without label error = %v", err)
 	}
-	if want := `<a href="/about.html">Fallback</a>` + "\n"; string(got) != want {
+	if want := `<a href="/about.html" data-base="https://mysite.example/">Fallback</a>` + "\n"; string(got) != want {
 		t.Errorf("RenderMarkdown() without label = %q, want %q", got, want)
 	}
 }

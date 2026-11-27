@@ -2,6 +2,8 @@
 
 Markdown pages can call named templates from `layout/` using shortcodes. Define a shortcode in any `.html` file under `layout/`:
 
+The site's root URL is configured as `base_url` in `ks-ssg.json` (initialized to `https://example.com/`). Page templates can use it as `.BaseURL`; shortcode templates can use `.Page.BaseURL`.
+
 ```html
 {{define "shortcode:link"}}
 {{if eq .Args.route "about"}}
@@ -28,7 +30,7 @@ A shortcode can also appear on its own line. Its output is emitted as a block in
 
 The template receives:
 
-- `.Page`: the current page, including fields such as `Title`, `URL`, and `Date`.
+- `.Page`: the current page, including fields such as `Title`, `URL`, `Date`, and `BaseURL`.
 - `.Args`: a map of string arguments supplied in the shortcode call. Values may be quoted to include spaces; unquoted values end at whitespace.
 
 Shortcodes are regular `html/template` templates, so conditionals and nested template calls are available. For example, a template can conditionally choose a URL or HTML attributes with `if` and `else`. Use `.Args.name` and `.Page` values as template data; interpolated values are contextually escaped by `html/template`.

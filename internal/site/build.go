@@ -18,15 +18,17 @@ type Config struct {
 	OutputDir string
 	LayoutDir string
 	StaticDir string
+	BaseURL   string
 }
 
 // DefaultConfig returns the repository's default source, output, and layout directories.
 func DefaultConfig() Config {
 	return Config{
-		SourceDir: "test/content",
-		OutputDir: "test/public",
-		LayoutDir: "test/layout",
-		StaticDir: "test/static",
+		SourceDir: "content",
+		OutputDir: "public",
+		LayoutDir: "layout",
+		StaticDir: "static",
+		BaseURL:   "https://example.com/",
 	}
 }
 
@@ -55,6 +57,7 @@ func Build(config Config) error {
 	}
 
 	for _, page := range pages {
+		page.BaseURL = config.BaseURL
 		if page.Draft {
 			continue
 		}

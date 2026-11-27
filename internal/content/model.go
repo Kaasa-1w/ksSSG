@@ -9,6 +9,7 @@ type Node struct {
 	SourcePath string
 	OutputPath string
 	URL        string
+	BaseURL    string
 
 	Title   string
 	Date    string

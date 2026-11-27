@@ -17,7 +17,7 @@ func TestRunBuildsUsingProjectConfiguration(t *testing.T) {
 		t.Fatalf("runAt(init) error = %v", err)
 	}
 	writeFile(t, sourceDir, "index.md", "+++\ntitle = \"Home\"\n+++\n# Home")
-	writeFile(t, layoutDir, "base.html", `{{.Content}}`)
+	writeFile(t, layoutDir, "base.html", `{{.BaseURL}}|{{.Content}}`)
 	writeFile(t, layoutDir, "term.html", `{{define "term"}}{{.Content}}{{end}}`)
 	writeFile(t, layoutDir, "non-term.html", `{{define "non-term"}}{{.Content}}{{end}}`)
 	writeFile(t, filepath.Join(root, "static"), "css/main.css", "body { color: blue; }\n")
@@ -30,7 +30,7 @@ func TestRunBuildsUsingProjectConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read generated page: %v", err)
 	}
-	if got, want := string(output), "<h1>Home</h1>\n"; got != want {
+	if got, want := string(output), "https://example.com/|<h1>Home</h1>\n"; got != want {
 		t.Errorf("generated page = %q, want %q", got, want)
 	}
 	assertFileContains(t, filepath.Join(outputDir, "css", "main.css"), "body { color: blue; }\n")
@@ -67,7 +67,13 @@ func TestInitCreatesConfigurationWithDefaultDirectories(t *testing.T) {
 	if err := json.Unmarshal(contents, &config); err != nil {
 		t.Fatalf("parse generated configuration: %v", err)
 	}
-	if config != (projectConfig{SourceDir: "content", OutputDir: "public", LayoutDir: "layout", StaticDir: "static"}) {
+	if config != (projectConfig{
+		SourceDir: "content",
+		OutputDir: "public",
+		LayoutDir: "layout",
+		StaticDir: "static",
+		BaseURL:   "https://example.com/",
+	}) {
 		t.Errorf("generated configuration = %+v", config)
 	}
 }
@@ -104,6 +110,7 @@ func TestLoadProjectConfigResolvesRelativeAndAbsoluteDirectories(t *testing.T) {
 		OutputDir: "public",
 		LayoutDir: "layout",
 		StaticDir: "assets",
+		BaseURL:   "https://mysite.example/blog/",
 	})
 	if err != nil {
 		t.Fatalf("marshal project configuration: %v", err)
@@ -125,6 +132,9 @@ func TestLoadProjectConfigResolvesRelativeAndAbsoluteDirectories(t *testing.T) {
 	}
 	if config.StaticDir != filepath.Join(root, "assets") {
 		t.Errorf("static directory = %q, want %q", config.StaticDir, filepath.Join(root, "assets"))
+	}
+	if config.BaseURL != "https://mysite.example/blog/" {
+		t.Errorf("base URL = %q, want %q", config.BaseURL, "https://mysite.example/blog/")
 	}
 }
 
