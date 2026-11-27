@@ -31,11 +31,12 @@ func TestRenderSelectsTemplateByTermStatus(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var output bytes.Buffer
 
-			err := renderer.Render(&output, &content.Node{
+			node := &content.Node{
 				IsTermNode: test.isTermNode,
 				Title:      "Example",
 				Content:    template.HTML("<p>body</p>"),
-			})
+			}
+			err := renderer.Render(&output, node)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -49,13 +50,18 @@ func TestRenderSelectsTemplateByTermStatus(t *testing.T) {
 			if !strings.Contains(output.String(), "<p>body</p>") {
 				t.Fatalf("output does not contain rendered content:\n%s", output.String())
 			}
+			if got, want := node.Content, template.HTML("<p>body</p>"); got != want {
+				t.Errorf("Render() changed node content to %q, want %q", got, want)
+			}
 		})
 	}
 }
 
 func TestNewRendererLoadsAddedTemplatesAndCrossFileDefinitions(t *testing.T) {
 	layoutDir := t.TempDir()
-	writeTemplateFile(t, layoutDir, "base.html", `{{template "card" .}}`)
+	writeTemplateFile(t, layoutDir, "base.html", `{{.Content}}`)
+	writeTemplateFile(t, layoutDir, "term.html", `{{define "term"}}{{template "card" .}}{{end}}`)
+	writeTemplateFile(t, layoutDir, "non-term.html", `{{define "non-term"}}{{template "card" .}}{{end}}`)
 	writeTemplateFile(t, layoutDir, "components/card.html", `{{define "card"}}Card: {{template "sample" .}}{{end}}`)
 	writeTemplateFile(t, layoutDir, "components/sample.html", `{{define "sample"}}{{.Title}}{{end}}`)
 

@@ -52,9 +52,24 @@ func NewRenderer(layoutDir string) (*Renderer, error) {
 	return &Renderer{templates: tmpl}, nil
 }
 
-// Render executes the shared page template and its node-specific content template.
+// Render selects a node-specific content template and renders it inside the shared page template.
 func (r *Renderer) Render(writer io.Writer, node *content.Node) error {
-	return r.templates.ExecuteTemplate(writer, "base.html", node)
+	contentTemplate := "term"
+	if !node.IsTermNode {
+		contentTemplate = "non-term"
+	}
+
+	var contentOutput bytes.Buffer
+	if err := r.templates.ExecuteTemplate(&contentOutput, contentTemplate, node); err != nil {
+		return fmt.Errorf("execute %q template: %w", contentTemplate, err)
+	}
+
+	renderedNode := *node
+	renderedNode.Content = template.HTML(contentOutput.String())
+	if err := r.templates.ExecuteTemplate(writer, "base.html", &renderedNode); err != nil {
+		return fmt.Errorf("execute base.html template: %w", err)
+	}
+	return nil
 }
 
 // RenderMarkdown converts Markdown and executes user-defined shortcode templates.

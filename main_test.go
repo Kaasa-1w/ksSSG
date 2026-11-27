@@ -17,7 +17,7 @@ func TestRunBuildsUsingProjectConfiguration(t *testing.T) {
 		t.Fatalf("runAt(init) error = %v", err)
 	}
 	writeFile(t, sourceDir, "index.md", "+++\ntitle = \"Home\"\n+++\n# Home")
-	writeFile(t, layoutDir, "base.html", `{{if .IsTermNode}}{{template "term" .}}{{else}}{{template "non-term" .}}{{end}}`)
+	writeFile(t, layoutDir, "base.html", `{{.Content}}`)
 	writeFile(t, layoutDir, "term.html", `{{define "term"}}{{.Content}}{{end}}`)
 	writeFile(t, layoutDir, "non-term.html", `{{define "non-term"}}{{.Content}}{{end}}`)
 	writeFile(t, filepath.Join(root, "static"), "css/main.css", "body { color: blue; }\n")
