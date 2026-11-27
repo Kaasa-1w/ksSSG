@@ -51,10 +51,16 @@ func TestInitDoesNotOverwriteExistingConfiguration(t *testing.T) {
 	if got, want := string(contents), `{"source_dir":"custom"}`; got != want {
 		t.Errorf("configuration = %q, want unchanged %q", got, want)
 	}
+	for _, directory := range []string{"content", "public", "layout", "static"} {
+		if _, err := os.Stat(filepath.Join(root, directory)); !os.IsNotExist(err) {
+			t.Errorf("directory %q should not be created when config exists, stat error = %v", directory, err)
+		}
+	}
 }
 
 func TestInitCreatesConfigurationWithDefaultDirectories(t *testing.T) {
 	root := t.TempDir()
+	writeFile(t, root, filepath.Join("content", "keep.txt"), "preserve")
 	if err := runAt([]string{"init"}, root); err != nil {
 		t.Fatalf("runAt(init) error = %v", err)
 	}
@@ -76,6 +82,17 @@ func TestInitCreatesConfigurationWithDefaultDirectories(t *testing.T) {
 	}) {
 		t.Errorf("generated configuration = %+v", config)
 	}
+	for _, directory := range []string{"content", "public", "layout", "static"} {
+		info, err := os.Stat(filepath.Join(root, directory))
+		if err != nil {
+			t.Errorf("directory %q was not created: %v", directory, err)
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("path %q is not a directory", directory)
+		}
+	}
+	assertFileContains(t, filepath.Join(root, "content", "keep.txt"), "preserve")
 }
 
 func TestLoadProjectConfigRejectsEmptyDirectories(t *testing.T) {

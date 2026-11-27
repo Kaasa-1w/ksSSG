@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,27 @@ func initializeProject(directory string) error {
 		StaticDir: "static",
 		BaseURL:   "https://example.com/",
 	}
+	if _, err := os.Lstat(path); err == nil {
+		return fmt.Errorf("create configuration file %q: %w", path, os.ErrExist)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect configuration file %q: %w", path, err)
+	}
+
+	directories := []struct {
+		name string
+		path string
+	}{
+		{name: "source", path: resolveConfigPath(directory, config.SourceDir)},
+		{name: "output", path: resolveConfigPath(directory, config.OutputDir)},
+		{name: "layout", path: resolveConfigPath(directory, config.LayoutDir)},
+		{name: "static", path: resolveConfigPath(directory, config.StaticDir)},
+	}
+	for _, dir := range directories {
+		if err := os.MkdirAll(dir.path, 0755); err != nil {
+			return fmt.Errorf("create %s directory %q: %w", dir.name, dir.path, err)
+		}
+	}
+
 	contents, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode project configuration: %w", err)
