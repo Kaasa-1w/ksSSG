@@ -2,8 +2,6 @@
 
 Markdown pages can call named templates from `layout/` using shortcodes. Define a shortcode in any `.html` file under `layout/`:
 
-The site's root URL is configured as `base_url` in `ks-ssg.json` (initialized to `https://example.com/`). Page templates can use it as `.BaseURL`; shortcode templates can use `.Page.BaseURL`.
-
 ```html
 {{define "shortcode:link"}}
 {{if eq .Args.route "about"}}
